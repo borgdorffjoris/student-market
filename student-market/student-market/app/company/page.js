@@ -8,6 +8,10 @@ function getCurrentSession(cutoffHour) {
   return hour < cutoffHour ? "morning" : "afternoon";
 }
 
+function fullName(s) {
+  return [s.first_name, s.infix, s.last_name].filter(Boolean).join(" ");
+}
+
 export default function CompanyPage() {
   const [userId, setUserId] = useState(null);
   const [studentNumber, setStudentNumber] = useState("");
@@ -37,7 +41,7 @@ export default function CompanyPage() {
 
     const { data } = await supabase
       .from("registrations")
-      .select("id, session, created_at, students(student_number, name)")
+      .select("id, session, created_at, students(student_number, first_name, infix, last_name)")
       .eq("company_id", authSession.user.id)
       .order("created_at", { ascending: false });
 
@@ -67,7 +71,7 @@ export default function CompanyPage() {
 
     const { data: student, error: findError } = await supabase
       .from("students")
-      .select("id, name, student_number")
+      .select("id, first_name, infix, last_name, student_number")
       .eq("student_number", number)
       .maybeSingle();
 
@@ -89,7 +93,7 @@ export default function CompanyPage() {
       if (insertError.code === "23505") {
         setStatus({
           type: "error",
-          text: `${student.name} already has a ${currentSession} registration (with another company).`,
+          text: `${fullName(student)} already has a ${currentSession} registration (with another company).`,
         });
       } else {
         setStatus({ type: "error", text: insertError.message });
@@ -99,7 +103,7 @@ export default function CompanyPage() {
 
     setStatus({
       type: "ok",
-      text: `Registered ${student.name} (${student.student_number}) for the ${currentSession} session.`,
+      text: `Registered ${fullName(student)} (${student.student_number}) for the ${currentSession} session.`,
     });
     setStudentNumber("");
     load();
@@ -158,7 +162,7 @@ export default function CompanyPage() {
               {registered.map((r) => (
                 <tr key={r.id}>
                   <td>{r.students?.student_number}</td>
-                  <td>{r.students?.name}</td>
+                  <td>{r.students ? fullName(r.students) : ""}</td>
                   <td className="capitalize">{r.session}</td>
                 </tr>
               ))}
