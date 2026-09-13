@@ -1,0 +1,41 @@
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background-color: #f6f4ec;
+  color: #1f2a24;
+}
+
+.btn {
+  @apply inline-flex items-center justify-center rounded-sm px-4 py-2 font-body font-medium transition-colors;
+}
+.btn-primary {
+  @apply bg-forest text-paper hover:bg-forestDark;
+}
+.btn-secondary {
+  @apply bg-transparent text-forest border border-forest hover:bg-forest hover:text-paper;
+}
+.btn-danger {
+  @apply bg-transparent text-danger border border-danger hover:bg-danger hover:text-paper;
+}
+
+.input {
+  @apply w-full rounded-sm border border-line bg-white px-3 py-2 font-body text-ink placeholder:text-ink/40 focus:outline-none focus:ring-2 focus:ring-forest/40;
+}
+
+.card {
+  @apply rounded-md border border-line bg-white/70 p-6;
+}
+
+.table-base {
+  @apply w-full border-collapse text-left font-body text-sm;
+}
+.table-base th {
+  @apply border-b border-line pb-2 pr-4 font-medium text-ink/60;
+}
+.table-base td {
+  @apply border-b border-line/60 py-2 pr-4;
+}
