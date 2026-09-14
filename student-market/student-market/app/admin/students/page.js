@@ -18,6 +18,8 @@ export default function StudentsPage() {
   const [newFirst, setNewFirst] = useState("");
   const [newInfix, setNewInfix] = useState("");
   const [newLast, setNewLast] = useState("");
+  const [newMentor, setNewMentor] = useState("");
+  const [newStamgroep, setNewStamgroep] = useState("");
   const [addError, setAddError] = useState("");
 
   // edit state
@@ -26,6 +28,8 @@ export default function StudentsPage() {
   const [editFirst, setEditFirst] = useState("");
   const [editInfix, setEditInfix] = useState("");
   const [editLast, setEditLast] = useState("");
+  const [editMentor, setEditMentor] = useState("");
+  const [editStamgroep, setEditStamgroep] = useState("");
 
   const [csvBusy, setCsvBusy] = useState(false);
   const [csvSummary, setCsvSummary] = useState("");
@@ -48,7 +52,9 @@ export default function StudentsPage() {
       list = list.filter(
         (s) =>
           fullName(s).toLowerCase().includes(q) ||
-          s.student_number.toLowerCase().includes(q)
+          s.student_number.toLowerCase().includes(q) ||
+          (s.mentor || "").toLowerCase().includes(q) ||
+          (s.stamgroep || "").toLowerCase().includes(q)
       );
     }
     return [...list].sort((a, b) =>
@@ -78,6 +84,8 @@ export default function StudentsPage() {
       first_name: newFirst.trim(),
       infix: newInfix.trim() || null,
       last_name: newLast.trim(),
+      mentor: newMentor.trim() || null,
+      stamgroep: newStamgroep.trim() || null,
     });
 
     if (error) {
@@ -93,6 +101,8 @@ export default function StudentsPage() {
     setNewFirst("");
     setNewInfix("");
     setNewLast("");
+    setNewMentor("");
+    setNewStamgroep("");
     load();
   }
 
@@ -102,6 +112,8 @@ export default function StudentsPage() {
     setEditFirst(s.first_name);
     setEditInfix(s.infix || "");
     setEditLast(s.last_name);
+    setEditMentor(s.mentor || "");
+    setEditStamgroep(s.stamgroep || "");
   }
 
   async function saveEdit(id) {
@@ -113,6 +125,8 @@ export default function StudentsPage() {
         first_name: editFirst.trim(),
         infix: editInfix.trim() || null,
         last_name: editLast.trim(),
+        mentor: editMentor.trim() || null,
+        stamgroep: editStamgroep.trim() || null,
       })
       .eq("id", id);
     if (!error) {
@@ -139,7 +153,7 @@ export default function StudentsPage() {
 
     const delimiter = (lines[0] || "").includes(";") ? ";" : ",";
 
-    // Optional header row: leerlingnummer;voornaam;tussenvoegsel;achternaam
+    // Optional header row: leerlingnummer;voornaam;tussenvoegsel;achternaam;mentor;stamgroep
     let dataLines = lines;
     if (/nummer|number/i.test(lines[0])) {
       dataLines = lines.slice(1);
@@ -150,15 +164,27 @@ export default function StudentsPage() {
 
     dataLines.forEach((line) => {
       const parts = line.split(delimiter).map((p) => p.trim());
-      // Expect: number, first name, infix (may be empty), last name
+      // Expect: number, first name, infix, last name, [mentor], [stamgroep]
+      // infix may be genuinely empty between two delimiters.
       if (parts.length < 3) {
         skipped.push(line);
         return;
       }
-      const [student_number, first_name, infix, last_name] =
-        parts.length >= 4
-          ? parts
-          : [parts[0], parts[1], "", parts[2]]; // no infix column supplied
+
+      let student_number, first_name, infix, last_name, mentor, stamgroep;
+
+      if (parts.length >= 6) {
+        [student_number, first_name, infix, last_name, mentor, stamgroep] = parts;
+      } else if (parts.length === 5) {
+        // Ambiguous 5th column — treat as mentor, no stamgroep.
+        [student_number, first_name, infix, last_name, mentor] = parts;
+      } else if (parts.length === 4) {
+        [student_number, first_name, infix, last_name] = parts;
+      } else {
+        // 3 columns: no infix column supplied
+        [student_number, first_name, last_name] = parts;
+        infix = "";
+      }
 
       if (!validNumber(student_number) || !first_name || !last_name) {
         skipped.push(line);
@@ -170,12 +196,14 @@ export default function StudentsPage() {
         first_name,
         infix: infix || null,
         last_name,
+        mentor: mentor || null,
+        stamgroep: stamgroep || null,
       });
     });
 
     if (rows.length === 0) {
       setCsvSummary(
-        "No valid rows found. Expect: leerlingnummer;voornaam;tussenvoegsel;achternaam (6-digit number required)."
+        "No valid rows found. Expect: leerlingnummer;voornaam;tussenvoegsel;achternaam;mentor;stamgroep (6-digit number required)."
       );
       setCsvBusy(false);
       e.target.value = "";
@@ -235,6 +263,18 @@ export default function StudentsPage() {
             value={newLast}
             onChange={(e) => setNewLast(e.target.value)}
           />
+          <input
+            className="input"
+            placeholder="Mentor (optioneel)"
+            value={newMentor}
+            onChange={(e) => setNewMentor(e.target.value)}
+          />
+          <input
+            className="input"
+            placeholder="Stamgroep (optioneel)"
+            value={newStamgroep}
+            onChange={(e) => setNewStamgroep(e.target.value)}
+          />
           {addError && <p className="text-sm text-danger">{addError}</p>}
           <button className="btn btn-primary">Add student</button>
         </form>
@@ -242,8 +282,9 @@ export default function StudentsPage() {
         <div className="space-y-3">
           <h3 className="font-medium text-ink">Import from CSV</h3>
           <p className="text-sm text-ink/60">
-            Each line: <code>leerlingnummer;voornaam;tussenvoegsel;achternaam</code>.
-            Tussenvoegsel may be left empty. A header row is optional.
+            Each line:{" "}
+            <code>leerlingnummer;voornaam;tussenvoegsel;achternaam;mentor;stamgroep</code>.
+            Tussenvoegsel, mentor and stamgroep may be left empty. A header row is optional.
           </p>
           <input
             type="file"
@@ -260,7 +301,7 @@ export default function StudentsPage() {
       <div className="flex flex-wrap items-center gap-3">
         <input
           className="input max-w-xs"
-          placeholder="Search by name or number…"
+          placeholder="Search by name, number, mentor, stamgroep…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -285,98 +326,118 @@ export default function StudentsPage() {
       {loading ? (
         <p className="text-ink/50">Loading…</p>
       ) : (
-        <table className="table-base">
-          <thead>
-            <tr>
-              <th>Leerlingnummer</th>
-              <th>Voornaam</th>
-              <th>Tussenvoegsel</th>
-              <th>Achternaam</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {visible.map((s) => (
-              <tr key={s.id}>
-                {editingId === s.id ? (
-                  <>
-                    <td>
-                      <input
-                        className="input"
-                        value={editNumber}
-                        onChange={(e) => setEditNumber(e.target.value)}
-                        maxLength={6}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        className="input"
-                        value={editFirst}
-                        onChange={(e) => setEditFirst(e.target.value)}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        className="input"
-                        value={editInfix}
-                        onChange={(e) => setEditInfix(e.target.value)}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        className="input"
-                        value={editLast}
-                        onChange={(e) => setEditLast(e.target.value)}
-                      />
-                    </td>
-                    <td className="space-x-2 whitespace-nowrap">
-                      <button
-                        className="btn btn-primary text-xs"
-                        onClick={() => saveEdit(s.id)}
-                      >
-                        Save
-                      </button>
-                      <button
-                        className="btn btn-secondary text-xs"
-                        onClick={() => setEditingId(null)}
-                      >
-                        Cancel
-                      </button>
-                    </td>
-                  </>
-                ) : (
-                  <>
-                    <td>{s.student_number}</td>
-                    <td>{s.first_name}</td>
-                    <td>{s.infix || <span className="text-ink/30">—</span>}</td>
-                    <td>{s.last_name}</td>
-                    <td className="space-x-2 whitespace-nowrap">
-                      <button
-                        className="text-sm text-forest underline"
-                        onClick={() => startEdit(s)}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        className="text-sm text-danger underline"
-                        onClick={() => handleDelete(s.id)}
-                      >
-                        Remove
-                      </button>
-                    </td>
-                  </>
-                )}
-              </tr>
-            ))}
-            {visible.length === 0 && (
+        <div className="overflow-x-auto">
+          <table className="table-base">
+            <thead>
               <tr>
-                <td colSpan={5} className="py-6 text-center text-ink/40">
-                  No students match.
-                </td>
+                <th>Leerlingnummer</th>
+                <th>Voornaam</th>
+                <th>Tussenvoegsel</th>
+                <th>Achternaam</th>
+                <th>Mentor</th>
+                <th>Stamgroep</th>
+                <th></th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {visible.map((s) => (
+                <tr key={s.id}>
+                  {editingId === s.id ? (
+                    <>
+                      <td>
+                        <input
+                          className="input"
+                          value={editNumber}
+                          onChange={(e) => setEditNumber(e.target.value)}
+                          maxLength={6}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className="input"
+                          value={editFirst}
+                          onChange={(e) => setEditFirst(e.target.value)}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className="input"
+                          value={editInfix}
+                          onChange={(e) => setEditInfix(e.target.value)}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className="input"
+                          value={editLast}
+                          onChange={(e) => setEditLast(e.target.value)}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className="input"
+                          value={editMentor}
+                          onChange={(e) => setEditMentor(e.target.value)}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className="input"
+                          value={editStamgroep}
+                          onChange={(e) => setEditStamgroep(e.target.value)}
+                        />
+                      </td>
+                      <td className="space-x-2 whitespace-nowrap">
+                        <button
+                          className="btn btn-primary text-xs"
+                          onClick={() => saveEdit(s.id)}
+                        >
+                          Save
+                        </button>
+                        <button
+                          className="btn btn-secondary text-xs"
+                          onClick={() => setEditingId(null)}
+                        >
+                          Cancel
+                        </button>
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td>{s.student_number}</td>
+                      <td>{s.first_name}</td>
+                      <td>{s.infix || <span className="text-ink/30">—</span>}</td>
+                      <td>{s.last_name}</td>
+                      <td>{s.mentor || <span className="text-ink/30">—</span>}</td>
+                      <td>{s.stamgroep || <span className="text-ink/30">—</span>}</td>
+                      <td className="space-x-2 whitespace-nowrap">
+                        <button
+                          className="text-sm text-forest underline"
+                          onClick={() => startEdit(s)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className="text-sm text-danger underline"
+                          onClick={() => handleDelete(s.id)}
+                        >
+                          Remove
+                        </button>
+                      </td>
+                    </>
+                  )}
+                </tr>
+              ))}
+              {visible.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="py-6 text-center text-ink/40">
+                    No students match.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );
