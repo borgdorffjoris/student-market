@@ -19,8 +19,12 @@ export default function CompanyPage() {
   const [busy, setBusy] = useState(false);
   const [registered, setRegistered] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [cutoffHour, setCutoffHour] = useState(12);
   const [session, setSession] = useState("morning");
+
+  const [maxPerSession, setMaxPerSession] = useState(null);
+  const [maxInput, setMaxInput] = useState("");
+  const [savingMax, setSavingMax] = useState(false);
+  const [maxMessage, setMaxMessage] = useState("");
 
   async function load() {
     const {
@@ -34,10 +38,15 @@ export default function CompanyPage() {
       .select("cutoff_hour")
       .eq("id", 1)
       .maybeSingle();
+    setSession(getCurrentSession(settings?.cutoff_hour ?? 12));
 
-    const cutoff = settings?.cutoff_hour ?? 12;
-    setCutoffHour(cutoff);
-    setSession(getCurrentSession(cutoff));
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("max_per_session")
+      .eq("id", authSession.user.id)
+      .maybeSingle();
+    setMaxPerSession(profile?.max_per_session ?? null);
+    setMaxInput(profile?.max_per_session ?? "");
 
     const { data } = await supabase
       .from("registrations")
@@ -51,14 +60,30 @@ export default function CompanyPage() {
 
   useEffect(() => {
     load();
-    const interval = setInterval(() => {
-      setCutoffHour((c) => {
-        setSession(getCurrentSession(c));
-        return c;
-      });
-    }, 60000);
-    return () => clearInterval(interval);
   }, []);
+
+  const morningCount = registered.filter((r) => r.session === "morning").length;
+  const afternoonCount = registered.filter((r) => r.session === "afternoon").length;
+
+  async function handleSaveMax(e) {
+    e.preventDefault();
+    setSavingMax(true);
+    setMaxMessage("");
+
+    const value = maxInput === "" ? null : Number(maxInput);
+    const { error } = await supabase
+      .from("profiles")
+      .update({ max_per_session: value })
+      .eq("id", userId);
+
+    setSavingMax(false);
+    if (error) {
+      setMaxMessage(error.message);
+    } else {
+      setMaxPerSession(value);
+      setMaxMessage("Saved.");
+    }
+  }
 
   async function handleRegister(e) {
     e.preventDefault();
@@ -67,7 +92,6 @@ export default function CompanyPage() {
     if (!number) return;
 
     setBusy(true);
-    const currentSession = getCurrentSession(cutoffHour);
 
     const { data: student, error: findError } = await supabase
       .from("students")
@@ -84,7 +108,7 @@ export default function CompanyPage() {
     const { error: insertError } = await supabase.from("registrations").insert({
       student_id: student.id,
       company_id: userId,
-      session: currentSession,
+      session,
     });
 
     setBusy(false);
@@ -93,8 +117,10 @@ export default function CompanyPage() {
       if (insertError.code === "23505") {
         setStatus({
           type: "error",
-          text: `${fullName(student)} already has a ${currentSession} registration (with another company).`,
+          text: `${fullName(student)} already has a ${session} registration (with another company).`,
         });
+      } else if (insertError.message?.includes("maximum")) {
+        setStatus({ type: "error", text: insertError.message });
       } else {
         setStatus({ type: "error", text: insertError.message });
       }
@@ -103,7 +129,7 @@ export default function CompanyPage() {
 
     setStatus({
       type: "ok",
-      text: `Registered ${fullName(student)} (${student.student_number}) for the ${currentSession} session.`,
+      text: `Registered ${fullName(student)} (${student.student_number}) for the ${session} session.`,
     });
     setStudentNumber("");
     load();
@@ -115,13 +141,22 @@ export default function CompanyPage() {
         <h2 className="font-display text-2xl font-semibold text-forest">
           Register a student
         </h2>
-        <p className="text-ink/60">
-          Current session:{" "}
-          <span className="font-medium text-forest">
-            {session === "morning" ? "Morning" : "Afternoon"}
-          </span>{" "}
-          <span className="text-ink/40">(switches at {cutoffHour}:00)</span>
-        </p>
+        <p className="text-ink/60">Choose the session, then enter a student number.</p>
+      </div>
+
+      <div className="flex gap-2">
+        <button
+          className={session === "morning" ? "btn btn-primary" : "btn btn-secondary"}
+          onClick={() => setSession("morning")}
+        >
+          Morning {maxPerSession != null && `(${morningCount}/${maxPerSession})`}
+        </button>
+        <button
+          className={session === "afternoon" ? "btn btn-primary" : "btn btn-secondary"}
+          onClick={() => setSession("afternoon")}
+        >
+          Afternoon {maxPerSession != null && `(${afternoonCount}/${maxPerSession})`}
+        </button>
       </div>
 
       <form onSubmit={handleRegister} className="card flex flex-col gap-3 sm:flex-row">
@@ -133,7 +168,7 @@ export default function CompanyPage() {
           autoFocus
         />
         <button className="btn btn-primary whitespace-nowrap" disabled={busy}>
-          {busy ? "Checking…" : "Register"}
+          {busy ? "Checking…" : `Register for ${session}`}
         </button>
       </form>
 
@@ -142,6 +177,35 @@ export default function CompanyPage() {
           {status.text}
         </p>
       )}
+
+      <details className="card">
+        <summary className="cursor-pointer font-medium text-ink">
+          Your capacity per session
+        </summary>
+        <form onSubmit={handleSaveMax} className="mt-4 flex items-end gap-3">
+          <div>
+            <label className="mb-1 block text-sm text-ink/70">
+              Max students per session
+            </label>
+            <input
+              type="number"
+              min="0"
+              className="input w-40"
+              placeholder="Unlimited"
+              value={maxInput}
+              onChange={(e) => setMaxInput(e.target.value)}
+            />
+          </div>
+          <button className="btn btn-primary" disabled={savingMax}>
+            {savingMax ? "Saving…" : "Save"}
+          </button>
+          {maxMessage && <span className="text-sm text-forest">{maxMessage}</span>}
+        </form>
+        <p className="mt-2 text-sm text-ink/50">
+          Leave empty for no limit. This applies separately to your morning and afternoon
+          sessions.
+        </p>
+      </details>
 
       <div>
         <h3 className="mb-3 font-medium text-ink">Your registered students</h3>

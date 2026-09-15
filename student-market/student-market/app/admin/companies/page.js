@@ -13,11 +13,22 @@ export default function CompaniesPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
+  const [editingId, setEditingId] = useState(null);
+  const [editName, setEditName] = useState("");
+  const [editMax, setEditMax] = useState("");
+
+  async function authHeader() {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    return { Authorization: `Bearer ${session?.access_token}` };
+  }
+
   async function load() {
     setLoading(true);
     const { data } = await supabase
       .from("profiles")
-      .select("id, email, company_name, created_at")
+      .select("id, email, company_name, max_per_session, created_at")
       .eq("role", "company")
       .order("created_at", { ascending: false });
     setCompanies(data || []);
@@ -35,16 +46,11 @@ export default function CompaniesPage() {
     if (!email.trim()) return;
 
     setSending(true);
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    const headers = await authHeader();
 
     const res = await fetch("/api/invite-company", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${session?.access_token}`,
-      },
+      headers: { "Content-Type": "application/json", ...headers },
       body: JSON.stringify({ email: email.trim(), companyName: companyName.trim() }),
     });
 
@@ -60,6 +66,48 @@ export default function CompaniesPage() {
     setEmail("");
     setCompanyName("");
     load();
+  }
+
+  function startEdit(c) {
+    setEditingId(c.id);
+    setEditName(c.company_name || "");
+    setEditMax(c.max_per_session ?? "");
+  }
+
+  async function saveEdit(id) {
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        company_name: editName.trim() || null,
+        max_per_session: editMax === "" ? null : Number(editMax),
+      })
+      .eq("id", id);
+    if (!error) {
+      setEditingId(null);
+      load();
+    }
+  }
+
+  async function handleDelete(company) {
+    if (
+      !confirm(
+        `Remove ${company.company_name || company.email}? This deletes their login and all their registrations.`
+      )
+    )
+      return;
+
+    const headers = await authHeader();
+    const res = await fetch("/api/delete-company", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify({ companyId: company.id }),
+    });
+
+    if (res.ok) load();
+    else {
+      const result = await res.json();
+      alert(result.error || "Failed to delete.");
+    }
   }
 
   return (
@@ -101,20 +149,77 @@ export default function CompaniesPage() {
             <tr>
               <th>Company</th>
               <th>Email</th>
+              <th>Max per session</th>
               <th>Invited</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
             {companies.map((c) => (
               <tr key={c.id}>
-                <td>{c.company_name || <span className="text-ink/40">—</span>}</td>
-                <td>{c.email}</td>
-                <td>{new Date(c.created_at).toLocaleDateString()}</td>
+                {editingId === c.id ? (
+                  <>
+                    <td>
+                      <input
+                        className="input"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                      />
+                    </td>
+                    <td>{c.email}</td>
+                    <td>
+                      <input
+                        className="input"
+                        type="number"
+                        min="0"
+                        placeholder="Unlimited"
+                        value={editMax}
+                        onChange={(e) => setEditMax(e.target.value)}
+                      />
+                    </td>
+                    <td>{new Date(c.created_at).toLocaleDateString()}</td>
+                    <td className="space-x-2 whitespace-nowrap">
+                      <button
+                        className="btn btn-primary text-xs"
+                        onClick={() => saveEdit(c.id)}
+                      >
+                        Save
+                      </button>
+                      <button
+                        className="btn btn-secondary text-xs"
+                        onClick={() => setEditingId(null)}
+                      >
+                        Cancel
+                      </button>
+                    </td>
+                  </>
+                ) : (
+                  <>
+                    <td>{c.company_name || <span className="text-ink/40">—</span>}</td>
+                    <td>{c.email}</td>
+                    <td>{c.max_per_session ?? <span className="text-ink/40">Unlimited</span>}</td>
+                    <td>{new Date(c.created_at).toLocaleDateString()}</td>
+                    <td className="space-x-2 whitespace-nowrap">
+                      <button
+                        className="text-sm text-forest underline"
+                        onClick={() => startEdit(c)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className="text-sm text-danger underline"
+                        onClick={() => handleDelete(c)}
+                      >
+                        Remove
+                      </button>
+                    </td>
+                  </>
+                )}
               </tr>
             ))}
             {companies.length === 0 && (
               <tr>
-                <td colSpan={3} className="py-6 text-center text-ink/40">
+                <td colSpan={5} className="py-6 text-center text-ink/40">
                   No companies invited yet.
                 </td>
               </tr>
