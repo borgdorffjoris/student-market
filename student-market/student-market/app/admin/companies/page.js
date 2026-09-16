@@ -15,7 +15,11 @@ export default function CompaniesPage() {
 
   const [editingId, setEditingId] = useState(null);
   const [editName, setEditName] = useState("");
-  const [editMax, setEditMax] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editMorning, setEditMorning] = useState("");
+  const [editAfternoon, setEditAfternoon] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState("");
 
   async function authHeader() {
     const {
@@ -28,7 +32,7 @@ export default function CompaniesPage() {
     setLoading(true);
     const { data } = await supabase
       .from("profiles")
-      .select("id, email, company_name, max_per_session, created_at")
+      .select("id, email, company_name, max_morning, max_afternoon, created_at")
       .eq("role", "company")
       .order("created_at", { ascending: false });
     setCompanies(data || []);
@@ -71,21 +75,51 @@ export default function CompaniesPage() {
   function startEdit(c) {
     setEditingId(c.id);
     setEditName(c.company_name || "");
-    setEditMax(c.max_per_session ?? "");
+    setEditEmail(c.email);
+    setEditMorning(c.max_morning ?? "");
+    setEditAfternoon(c.max_afternoon ?? "");
+    setEditError("");
   }
 
-  async function saveEdit(id) {
-    const { error } = await supabase
+  async function saveEdit(id, originalEmail) {
+    setSavingEdit(true);
+    setEditError("");
+
+    // Update name + capacity via the normal client (allowed by RLS).
+    const { error: profileError } = await supabase
       .from("profiles")
       .update({
         company_name: editName.trim() || null,
-        max_per_session: editMax === "" ? null : Number(editMax),
+        max_morning: editMorning === "" ? null : Number(editMorning),
+        max_afternoon: editAfternoon === "" ? null : Number(editAfternoon),
       })
       .eq("id", id);
-    if (!error) {
-      setEditingId(null);
-      load();
+
+    if (profileError) {
+      setSavingEdit(false);
+      setEditError(profileError.message);
+      return;
     }
+
+    // Email changes need the admin API (it touches the login itself).
+    if (editEmail.trim() !== originalEmail) {
+      const headers = await authHeader();
+      const res = await fetch("/api/update-company", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...headers },
+        body: JSON.stringify({ companyId: id, email: editEmail.trim() }),
+      });
+      if (!res.ok) {
+        const result = await res.json();
+        setSavingEdit(false);
+        setEditError(result.error || "Failed to update email.");
+        return;
+      }
+    }
+
+    setSavingEdit(false);
+    setEditingId(null);
+    load();
   }
 
   async function handleDelete(company) {
@@ -144,88 +178,113 @@ export default function CompaniesPage() {
       {loading ? (
         <p className="text-ink/50">Loading…</p>
       ) : (
-        <table className="table-base">
-          <thead>
-            <tr>
-              <th>Company</th>
-              <th>Email</th>
-              <th>Max per session</th>
-              <th>Invited</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {companies.map((c) => (
-              <tr key={c.id}>
-                {editingId === c.id ? (
-                  <>
-                    <td>
-                      <input
-                        className="input"
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
-                      />
-                    </td>
-                    <td>{c.email}</td>
-                    <td>
-                      <input
-                        className="input"
-                        type="number"
-                        min="0"
-                        placeholder="Unlimited"
-                        value={editMax}
-                        onChange={(e) => setEditMax(e.target.value)}
-                      />
-                    </td>
-                    <td>{new Date(c.created_at).toLocaleDateString()}</td>
-                    <td className="space-x-2 whitespace-nowrap">
-                      <button
-                        className="btn btn-primary text-xs"
-                        onClick={() => saveEdit(c.id)}
-                      >
-                        Save
-                      </button>
-                      <button
-                        className="btn btn-secondary text-xs"
-                        onClick={() => setEditingId(null)}
-                      >
-                        Cancel
-                      </button>
-                    </td>
-                  </>
-                ) : (
-                  <>
-                    <td>{c.company_name || <span className="text-ink/40">—</span>}</td>
-                    <td>{c.email}</td>
-                    <td>{c.max_per_session ?? <span className="text-ink/40">Unlimited</span>}</td>
-                    <td>{new Date(c.created_at).toLocaleDateString()}</td>
-                    <td className="space-x-2 whitespace-nowrap">
-                      <button
-                        className="text-sm text-forest underline"
-                        onClick={() => startEdit(c)}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        className="text-sm text-danger underline"
-                        onClick={() => handleDelete(c)}
-                      >
-                        Remove
-                      </button>
-                    </td>
-                  </>
-                )}
-              </tr>
-            ))}
-            {companies.length === 0 && (
+        <div className="overflow-x-auto">
+          <table className="table-base">
+            <thead>
               <tr>
-                <td colSpan={5} className="py-6 text-center text-ink/40">
-                  No companies invited yet.
-                </td>
+                <th>Company</th>
+                <th>Email</th>
+                <th>Max morning</th>
+                <th>Max afternoon</th>
+                <th>Invited</th>
+                <th></th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {companies.map((c) => (
+                <tr key={c.id}>
+                  {editingId === c.id ? (
+                    <>
+                      <td>
+                        <input
+                          className="input"
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className="input"
+                          type="email"
+                          value={editEmail}
+                          onChange={(e) => setEditEmail(e.target.value)}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className="input"
+                          type="number"
+                          min="0"
+                          placeholder="Unlimited"
+                          value={editMorning}
+                          onChange={(e) => setEditMorning(e.target.value)}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className="input"
+                          type="number"
+                          min="0"
+                          placeholder="Unlimited"
+                          value={editAfternoon}
+                          onChange={(e) => setEditAfternoon(e.target.value)}
+                        />
+                      </td>
+                      <td>{new Date(c.created_at).toLocaleDateString()}</td>
+                      <td className="space-x-2 whitespace-nowrap">
+                        <button
+                          className="btn btn-primary text-xs"
+                          onClick={() => saveEdit(c.id, c.email)}
+                          disabled={savingEdit}
+                        >
+                          {savingEdit ? "Saving…" : "Save"}
+                        </button>
+                        <button
+                          className="btn btn-secondary text-xs"
+                          onClick={() => setEditingId(null)}
+                        >
+                          Cancel
+                        </button>
+                        {editError && (
+                          <p className="mt-1 text-xs text-danger">{editError}</p>
+                        )}
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td>{c.company_name || <span className="text-ink/40">—</span>}</td>
+                      <td>{c.email}</td>
+                      <td>{c.max_morning ?? <span className="text-ink/40">Unlimited</span>}</td>
+                      <td>{c.max_afternoon ?? <span className="text-ink/40">Unlimited</span>}</td>
+                      <td>{new Date(c.created_at).toLocaleDateString()}</td>
+                      <td className="space-x-2 whitespace-nowrap">
+                        <button
+                          className="text-sm text-forest underline"
+                          onClick={() => startEdit(c)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className="text-sm text-danger underline"
+                          onClick={() => handleDelete(c)}
+                        >
+                          Remove
+                        </button>
+                      </td>
+                    </>
+                  )}
+                </tr>
+              ))}
+              {companies.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="py-6 text-center text-ink/40">
+                    No companies invited yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

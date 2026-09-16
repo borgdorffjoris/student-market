@@ -21,8 +21,10 @@ export default function CompanyPage() {
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState("morning");
 
-  const [maxPerSession, setMaxPerSession] = useState(null);
-  const [maxInput, setMaxInput] = useState("");
+  const [maxMorning, setMaxMorning] = useState(null);
+  const [maxAfternoon, setMaxAfternoon] = useState(null);
+  const [morningInput, setMorningInput] = useState("");
+  const [afternoonInput, setAfternoonInput] = useState("");
   const [savingMax, setSavingMax] = useState(false);
   const [maxMessage, setMaxMessage] = useState("");
 
@@ -42,11 +44,13 @@ export default function CompanyPage() {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("max_per_session")
+      .select("max_morning, max_afternoon")
       .eq("id", authSession.user.id)
       .maybeSingle();
-    setMaxPerSession(profile?.max_per_session ?? null);
-    setMaxInput(profile?.max_per_session ?? "");
+    setMaxMorning(profile?.max_morning ?? null);
+    setMaxAfternoon(profile?.max_afternoon ?? null);
+    setMorningInput(profile?.max_morning ?? "");
+    setAfternoonInput(profile?.max_afternoon ?? "");
 
     const { data } = await supabase
       .from("registrations")
@@ -70,17 +74,20 @@ export default function CompanyPage() {
     setSavingMax(true);
     setMaxMessage("");
 
-    const value = maxInput === "" ? null : Number(maxInput);
+    const morningValue = morningInput === "" ? null : Number(morningInput);
+    const afternoonValue = afternoonInput === "" ? null : Number(afternoonInput);
+
     const { error } = await supabase
       .from("profiles")
-      .update({ max_per_session: value })
+      .update({ max_morning: morningValue, max_afternoon: afternoonValue })
       .eq("id", userId);
 
     setSavingMax(false);
     if (error) {
       setMaxMessage(error.message);
     } else {
-      setMaxPerSession(value);
+      setMaxMorning(morningValue);
+      setMaxAfternoon(afternoonValue);
       setMaxMessage("Saved.");
     }
   }
@@ -119,8 +126,6 @@ export default function CompanyPage() {
           type: "error",
           text: `${fullName(student)} already has a ${session} registration (with another company).`,
         });
-      } else if (insertError.message?.includes("maximum")) {
-        setStatus({ type: "error", text: insertError.message });
       } else {
         setStatus({ type: "error", text: insertError.message });
       }
@@ -149,13 +154,13 @@ export default function CompanyPage() {
           className={session === "morning" ? "btn btn-primary" : "btn btn-secondary"}
           onClick={() => setSession("morning")}
         >
-          Morning {maxPerSession != null && `(${morningCount}/${maxPerSession})`}
+          Morning {maxMorning != null && `(${morningCount}/${maxMorning})`}
         </button>
         <button
           className={session === "afternoon" ? "btn btn-primary" : "btn btn-secondary"}
           onClick={() => setSession("afternoon")}
         >
-          Afternoon {maxPerSession != null && `(${afternoonCount}/${maxPerSession})`}
+          Afternoon {maxAfternoon != null && `(${afternoonCount}/${maxAfternoon})`}
         </button>
       </div>
 
@@ -182,18 +187,27 @@ export default function CompanyPage() {
         <summary className="cursor-pointer font-medium text-ink">
           Your capacity per session
         </summary>
-        <form onSubmit={handleSaveMax} className="mt-4 flex items-end gap-3">
+        <form onSubmit={handleSaveMax} className="mt-4 flex flex-wrap items-end gap-3">
           <div>
-            <label className="mb-1 block text-sm text-ink/70">
-              Max students per session
-            </label>
+            <label className="mb-1 block text-sm text-ink/70">Max in the morning</label>
             <input
               type="number"
               min="0"
-              className="input w-40"
+              className="input w-36"
               placeholder="Unlimited"
-              value={maxInput}
-              onChange={(e) => setMaxInput(e.target.value)}
+              value={morningInput}
+              onChange={(e) => setMorningInput(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm text-ink/70">Max in the afternoon</label>
+            <input
+              type="number"
+              min="0"
+              className="input w-36"
+              placeholder="Unlimited"
+              value={afternoonInput}
+              onChange={(e) => setAfternoonInput(e.target.value)}
             />
           </div>
           <button className="btn btn-primary" disabled={savingMax}>
@@ -201,10 +215,7 @@ export default function CompanyPage() {
           </button>
           {maxMessage && <span className="text-sm text-forest">{maxMessage}</span>}
         </form>
-        <p className="mt-2 text-sm text-ink/50">
-          Leave empty for no limit. This applies separately to your morning and afternoon
-          sessions.
-        </p>
+        <p className="mt-2 text-sm text-ink/50">Leave a field empty for no limit.</p>
       </details>
 
       <div>
