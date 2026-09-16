@@ -11,6 +11,12 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const [showForgot, setShowForgot] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotSending, setForgotSending] = useState(false);
+  const [forgotMessage, setForgotMessage] = useState("");
+  const [forgotError, setForgotError] = useState("");
+
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
@@ -39,6 +45,72 @@ export default function LoginPage() {
       setError("This account isn't set up yet. Contact the organizer.");
       setLoading(false);
     }
+  }
+
+  async function handleForgotSubmit(e) {
+    e.preventDefault();
+    setForgotError("");
+    setForgotMessage("");
+    if (!forgotEmail.trim()) return;
+
+    setForgotSending(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail.trim(), {
+      redirectTo: `${window.location.origin}/set-password`,
+    });
+    setForgotSending(false);
+
+    if (error) {
+      setForgotError(error.message);
+    } else {
+      setForgotMessage("If that email has an account, a reset link is on its way.");
+    }
+  }
+
+  if (showForgot) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-paper px-4">
+        <div className="w-full max-w-sm">
+          <h1 className="mb-1 font-display text-3xl font-semibold text-forest">
+            Reset your password
+          </h1>
+          <p className="mb-8 text-ink/60">
+            Enter your email and we'll send you a link to set a new password.
+          </p>
+
+          <form onSubmit={handleForgotSubmit} className="card space-y-4">
+            <div>
+              <label className="mb-1 block text-sm text-ink/70">Email</label>
+              <input
+                className="input"
+                type="email"
+                required
+                value={forgotEmail}
+                onChange={(e) => setForgotEmail(e.target.value)}
+                placeholder="you@company.com"
+              />
+            </div>
+
+            {forgotError && <p className="text-sm text-danger">{forgotError}</p>}
+            {forgotMessage && <p className="text-sm text-forest">{forgotMessage}</p>}
+
+            <button className="btn btn-primary w-full" disabled={forgotSending}>
+              {forgotSending ? "Sending…" : "Send reset link"}
+            </button>
+          </form>
+
+          <button
+            className="mt-4 text-sm text-forest underline"
+            onClick={() => {
+              setShowForgot(false);
+              setForgotMessage("");
+              setForgotError("");
+            }}
+          >
+            Back to sign in
+          </button>
+        </div>
+      </main>
+    );
   }
 
   return (
@@ -80,9 +152,12 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="mt-4 text-sm text-ink/50">
-          Companies: use the password you set from your invite email.
-        </p>
+        <button
+          className="mt-4 text-sm text-forest underline"
+          onClick={() => setShowForgot(true)}
+        >
+          Forgot password?
+        </button>
       </div>
     </main>
   );
