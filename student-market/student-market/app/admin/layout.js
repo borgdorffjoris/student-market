@@ -58,7 +58,6 @@ export default function AdminLayout({ children }) {
     { href: "/admin", label: "Results" },
     { href: "/admin/students", label: "Students" },
     { href: "/admin/companies", label: "Companies" },
-    { href: "/admin/settings", label: "Settings" },
   ];
 
   return (

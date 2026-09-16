@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
-function getCurrentSession(cutoffHour) {
+function getDefaultSession() {
   const hour = new Date().getHours();
-  return hour < cutoffHour ? "morning" : "afternoon";
+  return hour < 12 ? "morning" : "afternoon";
 }
 
 function fullName(s) {
@@ -19,7 +19,7 @@ export default function CompanyPage() {
   const [busy, setBusy] = useState(false);
   const [registered, setRegistered] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [session, setSession] = useState("morning");
+  const [session, setSession] = useState(getDefaultSession());
 
   const [maxMorning, setMaxMorning] = useState(null);
   const [maxAfternoon, setMaxAfternoon] = useState(null);
@@ -34,13 +34,6 @@ export default function CompanyPage() {
     } = await supabase.auth.getSession();
     if (!authSession) return;
     setUserId(authSession.user.id);
-
-    const { data: settings } = await supabase
-      .from("settings")
-      .select("cutoff_hour")
-      .eq("id", 1)
-      .maybeSingle();
-    setSession(getCurrentSession(settings?.cutoff_hour ?? 12));
 
     const { data: profile } = await supabase
       .from("profiles")
