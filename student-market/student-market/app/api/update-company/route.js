@@ -59,5 +59,18 @@ export async function POST(request) {
     return NextResponse.json({ error: profileError.message }, { status: 400 });
   }
 
+  // Send the new address a password-reset email so they can log in there.
+  const { error: resetError } = await anonClient.auth.resetPasswordForEmail(email, {
+    redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/set-password`,
+  });
+
+  if (resetError) {
+    // Email/profile change already succeeded — just flag that the reset mail failed.
+    return NextResponse.json(
+      { ok: true, warning: `Email updated, but sending the reset link failed: ${resetError.message}` },
+      { status: 200 }
+    );
+  }
+
   return NextResponse.json({ ok: true });
 }

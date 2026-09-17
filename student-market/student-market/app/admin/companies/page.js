@@ -109,11 +109,16 @@ export default function CompaniesPage() {
         headers: { "Content-Type": "application/json", ...headers },
         body: JSON.stringify({ companyId: id, email: editEmail.trim() }),
       });
+      const result = await res.json();
       if (!res.ok) {
-        const result = await res.json();
         setSavingEdit(false);
         setEditError(result.error || "Failed to update email.");
         return;
+      }
+      if (result.warning) {
+        setMessage(result.warning);
+      } else {
+        setMessage(`Email updated — a password reset link was sent to ${editEmail.trim()}.`);
       }
     }
 
